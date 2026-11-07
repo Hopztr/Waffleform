@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaffleForm</title>
+<style>
+  :root { --bg:#000; --panel:#0b0d12; --line:#252b38; --text:#e8ecf4; --mute:#8b95a8; --acc:#ff3b4e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif; }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px; }
+  h1 { font-size:30px; font-weight:800; color:#fff; margin:0 0 16px; letter-spacing:.3px; line-height:1.1; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  input[type=text] { flex:1; min-width:240px; background:var(--panel); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:8px; outline:none; }
+  input[type=text]:focus { border-color:#3b82f6; }
+  button, label.btn { background:var(--panel); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:8px; cursor:pointer; font:inherit; }
+  button:hover, label.btn:hover { border-color:#3b82f6; }
+  button.primary { background:#2563eb; border-color:#2563eb; }
+  .deck { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  canvas { display:block; width:100%; border-radius:8px; background:#000; }
+  #main { height:170px; }
+  #overview { height:56px; margin-top:10px; cursor:pointer; }
+  .ctrl { display:flex; align-items:center; gap:14px; margin-top:12px; flex-wrap:wrap; }
+  #time { font:600 20px ui-monospace,Menlo,Consolas,monospace; min-width:150px; }
+  .zoom { display:flex; align-items:center; gap:8px; color:var(--mute); margin-left:auto; }
+  #embed { margin-top:14px; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  #ytbox { width:360px; max-width:100%; aspect-ratio:16/9; display:none; }
+  #ytbox iframe { width:100%; height:100%; border-radius:8px; }
+  #spbox { width:360px; max-width:100%; display:none; }
+  #status { color:var(--mute); font-size:13px; margin-top:10px; min-height:18px; }
+  .menu { position:relative; }
+  .panel { position:absolute; right:0; top:calc(100% + 6px); z-index:20; width:270px; max-width:90vw; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); display:flex; flex-direction:column; gap:14px; }
+  .panel[hidden] { display:none; }
+  .sec { display:flex; flex-direction:column; gap:6px; }
+  .sec span { color:var(--mute); font-size:12px; }
+  #cfgbtn.on { border-color:#1db954; }
+  .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:8px; margin-bottom:14px; }
+  .results:empty { display:none; }
+  .results { align-content:start; grid-auto-rows:min-content; max-height:232px; overflow-y:auto; padding-right:6px; scrollbar-width:thin; scrollbar-color:#2a3040 transparent; }
+  .results::-webkit-scrollbar { width:8px; }
+  .results::-webkit-scrollbar-thumb { background:#2a3040; border-radius:4px; }
+  .item { display:flex; gap:10px; align-items:center; text-align:left; padding:6px; min-width:0; }
+  .item img { width:64px; height:48px; object-fit:cover; border-radius:6px; flex:none; }
+  .item div { display:flex; flex-direction:column; min-width:0; }
+  .item b { font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item span { color:var(--mute); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #dbbpm { font:600 16px ui-monospace,Menlo,Consolas,monospace; color:#7fd6ff; cursor:pointer; border-bottom:1px dashed #3b5a6b; white-space:nowrap; }
+  #tap { font-weight:800; letter-spacing:1px; padding:10px 20px; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  #tap:active { background:#1f2a3d; border-color:#7fd6ff; }
+  #tapbpm { font:600 16px ui-monospace,Menlo,Consolas,monospace; color:#9be37c; cursor:pointer; white-space:nowrap; min-width:92px; }
+  #dbmatch { color:var(--mute); font-size:12px; max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .foot { color:var(--mute); font-size:12px; margin-top:10px; }
+  .foot a { color:#8fb4ff; }
+  #bpm { font:600 20px ui-monospace,Menlo,Consolas,monospace; color:#ffd166; min-width:130px; }
+  select { background:var(--panel); border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font:inherit; }
+  .legend { display:flex; gap:12px; color:var(--mute); font-size:12px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>WaffleForm</h1>
+  <div class="bar">
+    <input id="q" type="text" placeholder="Search songs, artists, remixes…">
+    <select id="src" title="Where to search"><option value="yt">YouTube</option><option value="sp">Spotify</option></select>
+    <button class="primary" id="search">Search</button>
+    <button id="splists" hidden>My playlists</button>
+    <button id="spliked" hidden>Liked songs</button>
+    <div class="menu">
+      <button id="cfgbtn" title="Spotify login and YouTube API key">⚙ Settings</button>
+      <div id="cfgpanel" class="panel" hidden>
+        <div class="sec"><b>Spotify</b><span id="spstat">Not connected</span><button id="spbtn">Connect Spotify</button></div>
+        <div class="sec"><b>BPM database (GetSongBPM)</b><span id="gstat">No API key yet</span><button id="gkey">Set API key</button></div>
+        <div class="sec"><b>YouTube search</b><span id="ytstat">No API key</span><button id="key">Set API key</button></div>
+      </div>
+    </div>
+  </div>
+  <div id="results" class="results"></div>
+  <div class="bar">
+    <input id="url" type="text" placeholder="Paste a YouTube or Spotify track link…">
+    <button class="primary" id="load">Load</button>
+    <label class="btn">Local file<input id="file" type="file" accept="audio/*" hidden></label>
+    <button id="cap" title="Real-time waveform from the audio playing in this tab (Chrome / Edge desktop)">● Live capture</button>
+  </div>
+
+  <div class="deck">
+    <canvas id="main"></canvas>
+    <canvas id="overview"></canvas>
+    <div class="ctrl">
+      <button id="play">▶ / ❚❚</button>
+      <div id="time">0:00.0 / 0:00</div>
+      <div id="bpm" title="Needs real audio: local file or live capture">BPM —</div>
+      <div id="dbbpm" title="Database BPM and key (GetSongBPM). Click to look up a different song.">DB —</div>
+      <div id="dbmatch"></div>
+      <button id="tap" title="Tap along to the beat (or press T). Resets after 2.5 s without a tap.">TAP</button>
+      <div id="tapbpm" title="Tap tempo. Click to clear.">TAP —</div>
+      <select id="style" title="Waveform colors"><option value="rgb">RGB</option><option value="band">3-Band</option></select>
+      <div class="legend">
+        <span><i id="c0"></i>Low</span>
+        <span><i id="c1"></i>Mid</span>
+        <span><i id="c2"></i>High</span>
+      </div>
+      <div class="zoom">Zoom <input id="zoom" type="range" min="2" max="30" value="8"></div>
+    </div>
+    <div id="status">Load a link or a local file to start.</div>
+    <div id="embed">
+      <div id="ytbox"><div id="ytplayer"></div></div>
+      <div id="spbox"><div id="spplayer"></div></div>
+    </div>
+  </div>
+  <div class="foot">BPM database: <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM</a></div>
+</div>
+
+<script>
+'use strict';
+const RES = 50;                       // waveform points per second
+let wave = null;                      // {low, mid, high, n, simulated}
+let P = null;                         // unified player: {getTime, dur, playing, seek, toggle}
+let yt = null, spCtl = null, spApi = null, pollId = null;
+const $ = id => document.getElementById(id);
+const status = t => $('status').textContent = t;
+
+/* ---------- utils ---------- */
+const fmt = (s, tenth) => {
+  s = Math.max(0, s || 0);
+  const m = Math.floor(s / 60), r = s - m * 60;
+  return m + ':' + (tenth ? r.toFixed(1).padStart(4, '0') : String(Math.floor(r)).padStart(2, '0'));
+};
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src));
+    document.head.appendChild(s);
+  });
+}
+function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- clock-based player for embeds (YouTube / Spotify) ---------- */
+function makeClockPlayer(controls) {
+  const st = { t: 0, stamp: performance.now(), playing: false, dur: 0 };
+  return {
+    st,
+    set(t, playing, dur) { st.t = t; st.stamp = performance.now(); st.playing = playing; if (dur) st.dur = dur; },
+    getTime() { const t = st.playing ? st.t + (performance.now() - st.stamp) / 1000 : st.t; return st.dur ? Math.min(t, st.dur) : t; },
+    dur: () => st.dur,
+    playing: () => st.playing,
+    seek(s) { controls.seek(s); st.t = s; st.stamp = performance.now(); },
+    toggle: controls.toggle,
+  };
+}
+
+/* ---------- simulated waveform (embeds expose no audio data) ---------- */
+function simulateWave(seedStr, dur) {
+  const n = Math.ceil(dur * RES), R = rng(hash(seedStr));
+  const bpm = 118 + Math.floor(R() * 14), beat = 60 / bpm;
+  const low = new Float32Array(n), mid = new Float32Array(n), high = new Float32Array(n);
+  // section energy: intro / build / drop / break ... in 16-bar blocks
+  const bar = beat * 4, block = bar * 16, nBlocks = Math.ceil(dur / block) + 1;
+  const energy = Array.from({ length: nBlocks }, (_, i) => i === 0 ? 0.45 : [1, 0.9, 0.35, 1][Math.floor(R() * 4)] * (0.8 + R() * 0.2));
+  const bassLine = Array.from({ length: 8 }, () => 0.5 + R() * 0.5);
+  for (let i = 0; i < n; i++) {
+    const t = i / RES, b = t / beat, ph = b % 1, bi = Math.floor(b);
+    const e = energy[Math.floor(t / block)] || 0.6;
+    const edge = Math.min(1, (t % block) / 4);                         // soft fade into each block
+    const kick = e > 0.5 ? Math.exp(-ph * 7) : Math.exp(-ph * 7) * 0.4;
+    const bass = bassLine[bi % 8] * (0.35 + 0.65 * Math.sin(Math.PI * ((b * 2) % 1))) * (bi % 4 === 0 ? 0.7 : 1);
+    low[i] = Math.min(1, (kick * 0.85 + bass * 0.35 * e) * (0.8 + 0.2 * edge) + R() * 0.03);
+    const off = Math.exp((-((b + 0.5) % 1)) * 6);
+    mid[i] = Math.min(1, (0.2 + off * 0.5 + (bi % 4 === 3 ? 0.2 : 0)) * e * (0.7 + R() * 0.3));
+    const hat = Math.exp((-((b * 2 + 0.5) % 1)) * 9);
+    high[i] = Math.min(1, (0.08 + hat * 0.55) * (e > 0.4 ? 1 : 0.5) * (0.6 + R() * 0.4));
+  }
+  return { low, mid, high, n, simulated: true };
+}
+
+/* ---------- BPM detection (comb-style autocorrelation of a kick onset envelope) ---------- */
+function onsetEnv(d, sr) {                           // low-band signal -> half-wave rectified energy rise at ~200 Hz
+  const win = Math.max(1, Math.floor(sr / 200)), n = Math.floor(d.length / win), r = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < win; j++) { const v = d[i * win + j]; s += v * v; } r[i] = Math.sqrt(s / win); }
+  const o = new Float32Array(n); for (let i = 1; i < n; i++) o[i] = Math.max(0, r[i] - r[i - 1]);
+  return { o, res: sr / win };
+}
+function detectBPM(env, res, lo = 80, hi = 175) {    // range 80-175: slower tracks read as double time, like most DJ software
+  const n = env.length;
+  if (n < res * 6) return null;
+  let mean = 0; for (let i = 0; i < n; i++) mean += env[i]; mean /= n;
+  const e = new Float32Array(n); let energy = 0;
+  for (let i = 0; i < n; i++) { e[i] = env[i] - mean; energy += e[i] * e[i]; }
+  if (energy < 1e-12) return null;
+  const at = x => { const i = Math.floor(x); if (i < 0 || i + 1 >= n) return 0; const f = x - i; return e[i] * (1 - f) + e[i + 1] * f; };
+  const score = bpm => {
+    const L = res * 60 / bpm, lim = Math.floor(n - 4 * L - 2);
+    let s = 0;
+    for (let i = 0; i < lim; i++) { const v = e[i]; if (v <= 0) continue; s += v * (at(i + L) + at(i + 2 * L) + at(i + 4 * L)); }
+    return s / Math.max(1, lim);
+  };
+  let best = lo, bs = -Infinity, sum = 0, sum2 = 0, cnt = 0;
+  for (let b = lo; b <= hi; b += 0.25) { const s = score(b); sum += s; sum2 += s * s; cnt++; if (s > bs) { bs = s; best = b; } }
+  const mu = sum / cnt, sd = Math.sqrt(Math.max(1e-30, sum2 / cnt - mu * mu));
+  let rb = best, rs = -Infinity;
+  for (let b = best - 0.6; b <= best + 0.6; b += 0.02) { const s = score(b); if (s > rs) { rs = s; rb = b; } }
+  return { bpm: rb, conf: (bs - mu) / sd };
+}
+function showBPM(r, approx) {
+  $('bpm').textContent = r ? 'BPM ' + (approx ? '~' + Math.round(r.bpm) : r.bpm.toFixed(1)) : 'BPM —';
+}
+
+/* ---------- real waveform from a local file (3-band analysis) ---------- */
+async function analyzeBuffer(buf) {
+  const sr = buf.sampleRate, len = buf.length;
+  const mono = new AudioBuffer({ length: len, sampleRate: sr, numberOfChannels: 1 });
+  const out = mono.getChannelData(0);
+  for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) out[i] += d[i] / buf.numberOfChannels; }
+  const bands = [['lowpass', 200, 0.7], ['bandpass', 1400, 0.5], ['highpass', 5000, 0.7]];
+  const res = []; let lowEnv = null;
+  for (const [type, f, q] of bands) {
+    const ctx = new OfflineAudioContext(1, len, sr);
+    const src = ctx.createBufferSource(); src.buffer = mono;
+    const flt = ctx.createBiquadFilter(); flt.type = type; flt.frequency.value = f; flt.Q.value = q;
+    src.connect(flt); flt.connect(ctx.destination); src.start();
+    const d = (await ctx.startRendering()).getChannelData(0);
+    if (type === 'lowpass') lowEnv = onsetEnv(d, sr);
+    const win = Math.floor(sr / RES), n = Math.floor(len / win), a = new Float32Array(n);
+    let max = 0;
+    for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < win; j++) { const v = d[i * win + j]; s += v * v; } a[i] = Math.sqrt(s / win); if (a[i] > max) max = a[i]; }
+    for (let i = 0; i < n; i++) a[i] = Math.pow(a[i] / (max || 1), 0.75);
+    res.push(a);
+  }
+  // BPM from up to 2 minutes of the kick envelope, starting a bit after the intro
+  const o = lowEnv.o, start = o.length > lowEnv.res * 150 ? Math.floor(o.length * 0.15) : 0;
+  const seg = o.subarray(start, start + Math.floor(lowEnv.res * 120));
+  return { low: res[0], mid: res[1], high: res[2], n: res[0].length, simulated: false, bpm: detectBPM(seg, lowEnv.res) };
+}
+
+/* ---------- loaders ---------- */
+function resetEmbeds() {
+  stopCapture(); live = null; showBPM(null);
+  gsbSeq++; $('dbbpm').textContent = 'DB —'; $('dbmatch').textContent = '';
+  if (pollId) clearInterval(pollId), pollId = null;
+  if (yt && yt.destroy) { try { yt.destroy(); } catch (e) {} yt = null; $('ytbox').innerHTML = '<div id="ytplayer"></div>'; }
+  if (spCtl) { try { spCtl.destroy(); } catch (e) {} spCtl = null; $('spbox').innerHTML = '<div id="spplayer"></div>'; }
+  $('ytbox').style.display = $('spbox').style.display = 'none';
+  const a = document.getElementById('aud'); if (a) { a.pause(); a.remove(); }
+  wave = null; P = null;
+}
+
+async function loadYouTube(id) {
+  $('ytbox').style.display = 'block';
+  if (!window.YT || !YT.Player) {
+    await loadScript('https://www.youtube.com/iframe_api');
+    await new Promise(r => { const prev = window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady = () => { prev && prev(); r(); }; if (window.YT && YT.Player) r(); });
+  }
+  const ctl = makeClockPlayer({
+    seek: s => yt.seekTo(s, true),
+    toggle: () => yt.getPlayerState() === 1 ? yt.pauseVideo() : yt.playVideo(),
+  });
+  P = ctl;
+  yt = new YT.Player('ytplayer', {
+    videoId: id, width: '100%', height: '100%',
+    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+    events: {
+      onReady: () => {
+        status('YouTube ready' + (ytTries ? ' (skipped ' + ytTries + ' result' + (ytTries > 1 ? 's' : '') + ' that block embedding)' : '') + '. Press play. (Simulated waveform: YouTube does not expose its audio.)');
+        if (autoplayNext) { autoplayNext = false; try { yt.playVideo(); } catch (e) {} }
+      },
+      onError: e => {
+        const c = e.data, fromPick = ytQueue[ytIdx] === id;
+        if ((c === 101 || c === 150 || c === 100) && fromPick && ytTries < 6 && ytIdx + 1 < ytQueue.length) {
+          ytTries++; setTimeout(() => ytPick(ytIdx + 1, true), 0); return;          // blocked: try the next result
+        }
+        const why = { 2: 'invalid video ID', 5: 'the browser could not play it', 100: 'video not found or private',
+          101: 'the owner does not allow embedding', 150: 'the owner does not allow embedding',
+          153: 'missing referrer: open the app through http://127.0.0.1:8000, not as a file' }[c] || 'unknown error';
+        status('YouTube error ' + c + ': ' + why + '.' + (c === 101 || c === 150 ? ' Try another result or upload of the same track, or use Spotify or a local file.' : ''));
+      },
+    },
+  });
+  pollId = setInterval(() => {
+    if (!yt || !yt.getCurrentTime) return;
+    const dur = yt.getDuration() || 0;
+    ctl.set(yt.getCurrentTime(), yt.getPlayerState() === 1, dur);
+    if (dur && !wave) wave = simulateWave(id, dur);
+  }, 200);
+}
+
+async function loadSpotify(uri) {
+  $('spbox').style.display = 'block';
+  if (!spApi) {
+    spApi = await new Promise((res, rej) => {
+      window.onSpotifyIframeApiReady = api => res(api);
+      loadScript('https://open.spotify.com/embed/iframe-api/v1').catch(rej);
+    });
+  }
+  const ctl = makeClockPlayer({
+    seek: s => spCtl.seek(s),
+    toggle: () => spCtl.togglePlay(),
+  });
+  P = ctl;
+  spApi.createController($('spplayer'), { uri, width: '100%', height: 152 }, c => {
+    spCtl = c;
+    c.addListener('ready', () => {
+      status('Spotify ready. Press play. Without a logged-in Spotify session in this browser you get 30 s previews.');
+      if (autoplayNext) { autoplayNext = false; try { c.play(); } catch (e) {} }
+    });
+    c.addListener('playback_update', e => {
+      const d = e.data, dur = d.duration / 1000;
+      ctl.set(d.position / 1000, !d.isPaused, dur);
+      if (dur && !wave) wave = simulateWave(uri, dur);
+    });
+  });
+}
+
+async function loadFile(file) {
+  resetEmbeds();
+  meta = parseMeta(file.name.replace(/\.[^.]+$/, '').replace(/_/g, ' '), ''); gsbLookup(meta);
+  status('Decoding and analyzing audio…');
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ac.decodeAudioData(await file.arrayBuffer());
+  const a = new Audio(URL.createObjectURL(file)); a.id = 'aud'; a.preload = 'auto';
+  document.body.appendChild(a); a.style.display = 'none';
+  P = {
+    getTime: () => a.currentTime, dur: () => buf.duration, playing: () => !a.paused,
+    seek: s => a.currentTime = s, toggle: () => a.paused ? a.play() : a.pause(),
+  };
+  wave = await analyzeBuffer(buf);
+  showBPM(wave.bpm);
+  status('Real waveform from ' + file.name + '.');
+}
+
+function parse(u) {
+  u = u.trim();
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (m) return { kind: 'yt', id: m[1] };
+  m = u.match(/open\.spotify\.com\/(?:intl-\w+\/)?(track|episode)\/(\w+)/) || u.match(/spotify:(track|episode):(\w+)/);
+  if (m) return { kind: 'sp', uri: 'spotify:' + m[1] + ':' + m[2] };
+  return null;
+}
+
+/* ---------- YouTube search (YouTube Data API v3, your own key) ---------- */
+let autoplayNext = false;
+let ytQueue = [], ytMeta = {}, ytIdx = 0, ytTries = 0;                 // search results, current pick, auto-skips so far
+function ytPick(i, retry) {
+  ytIdx = i; if (!retry) ytTries = 0;
+  $('url').value = 'https://youtu.be/' + ytQueue[i]; autoplayNext = true; $('load').onclick();
+  if (ytMeta[ytQueue[i]]) { meta = ytMeta[ytQueue[i]]; gsbLookup(meta); }      // after load, which clears the DB chip
+}
+const getKey = () => { try { return localStorage.getItem('yt_api_key') || ''; } catch (e) { return ''; } };
+const setKey = k => { try { localStorage.setItem('yt_api_key', k); } catch (e) {} };
+const decode = s => new DOMParser().parseFromString(s, 'text/html').body.textContent;
+function askKey() {
+  const k = prompt('Paste your YouTube Data API v3 key (it stays in this browser only):', getKey());
+  if (k !== null) setKey(k.trim());
+  updateYtStat();
+  return getKey();
+}
+async function searchYT() {
+  const q = $('q').value.trim();
+  if (!q) return;
+  const key = getKey() || askKey();
+  if (!key) return status('Search needs a YouTube Data API key (open the menu at the top right and choose Set API key).');
+  status('Searching…');
+  const url = 'https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({
+    part: 'snippet', type: 'video', videoCategoryId: '10', videoEmbeddable: 'true', maxResults: '12', q, key });
+  try {
+    const r = await fetch(url), j = await r.json();
+    if (!r.ok) throw new Error(j.error && j.error.message ? j.error.message.replace(/<[^>]+>/g, '') : 'HTTP ' + r.status);
+    renderResults(j.items || []);
+    status(j.items && j.items.length ? 'Pick a result to load it.' : 'No results.');
+  } catch (e) { status('Search failed: ' + e.message); }
+}
+function renderResults(items) {
+  const box = $('results'); box.textContent = '';
+  ytQueue = items.map(it => it.id && it.id.videoId).filter(Boolean); ytMeta = {};
+  for (const it of items) {
+    const id = it.id && it.id.videoId;
+    if (!id) continue;
+    ytMeta[id] = parseMeta(decode(it.snippet.title), decode(it.snippet.channelTitle));
+    const b = document.createElement('button'); b.className = 'item';
+    const img = document.createElement('img'); img.src = it.snippet.thumbnails.default.url; img.alt = '';
+    const d = document.createElement('div');
+    const t = document.createElement('b'); t.textContent = decode(it.snippet.title);
+    const c = document.createElement('span'); c.textContent = decode(it.snippet.channelTitle);
+    d.append(t, c); b.append(img, d);
+    b.onclick = () => ytPick(ytQueue.indexOf(id));
+    box.appendChild(b);
+  }
+}
+const doSearch = () => $('src').value === 'sp' ? searchSP() : searchYT();
+$('search').onclick = doSearch;
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$('key').onclick = askKey;
+
+/* ---------- Spotify login (Authorization Code + PKCE, no client secret) ---------- */
+const spLS = (k, v) => {
+  try { if (v === undefined) return localStorage.getItem(k); v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {}
+  return null;
+};
+const SP_REDIRECT = location.origin + location.pathname;
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+async function spConnect() {
+  if (location.hostname === 'localhost')
+    return status('Spotify rejects "localhost". Open this page at http://127.0.0.1:' + location.port + location.pathname + ' and connect again from the menu at the top right.');
+  const cid = (prompt('Your Spotify app Client ID.\nIts Redirect URI must be exactly:\n' + SP_REDIRECT, spLS('sp_cid') || '') || '').trim();
+  if (!cid) return;
+  spLS('sp_cid', cid);
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
+  spLS('sp_verifier', verifier); spLS('sp_state', state);
+  location.href = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
+    client_id: cid, response_type: 'code', redirect_uri: SP_REDIRECT, code_challenge_method: 'S256', code_challenge: challenge, state,
+    scope: 'playlist-read-private playlist-read-collaborative user-library-read' });
+}
+async function spToken(body) {
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: spLS('sp_cid'), ...body }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error_description || j.error || 'token request failed');
+  spLS('sp_access', j.access_token); spLS('sp_exp', String(Date.now() + j.expires_in * 1000 - 60000));
+  if (j.refresh_token) spLS('sp_refresh', j.refresh_token);
+}
+async function spHandleRedirect() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has('code') && !p.has('error')) return;
+  history.replaceState({}, '', location.pathname);
+  if (p.get('error')) return status('Spotify login was cancelled or failed: ' + p.get('error'));
+  if (p.get('state') !== spLS('sp_state')) return status('Spotify login failed (state mismatch). Try again.');
+  await spToken({ grant_type: 'authorization_code', code: p.get('code'), redirect_uri: SP_REDIRECT, code_verifier: spLS('sp_verifier') });
+  spLS('sp_verifier', null); spLS('sp_state', null);
+  await spUpdateUI(true);
+}
+async function spFetch(path, params) {
+  if (!spLS('sp_access')) throw new Error('Not connected. Open the menu at the top right and connect Spotify.');
+  if (Date.now() > +spLS('sp_exp')) {
+    const rt = spLS('sp_refresh');
+    if (!rt) throw new Error('Session expired. Open the menu at the top right and connect Spotify again.');
+    await spToken({ grant_type: 'refresh_token', refresh_token: rt });
+  }
+  const r = await fetch('https://api.spotify.com/v1' + path + (params ? '?' + new URLSearchParams(params) : ''),
+    { headers: { Authorization: 'Bearer ' + spLS('sp_access') } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || 'Spotify error ' + r.status);
+  return j;
+}
+async function spUpdateUI(announce) {
+  const on = !!spLS('sp_access');
+  $('splists').hidden = $('spliked').hidden = !on;
+  $('cfgbtn').classList.toggle('on', on);
+  if (!on) {
+    $('cfgbtn').textContent = '⚙ Settings'; $('spbtn').textContent = 'Connect Spotify'; $('spstat').textContent = 'Not connected';
+    return;
+  }
+  $('spbtn').textContent = 'Disconnect Spotify';
+  try {
+    const me = await spFetch('/me');
+    const name = me.display_name || me.id;
+    $('cfgbtn').textContent = '● ' + name + ' ▾';              // the menu button is your Spotify name
+    $('spstat').textContent = 'Connected as ' + name;
+    if (announce) status('Spotify connected. Switch the search source to Spotify, or open your playlists.');
+  } catch (e) {
+    $('cfgbtn').textContent = '⚠ Spotify ▾'; $('spstat').textContent = 'Connection problem';
+    status('Spotify: ' + e.message + ' (In a development-mode app, your account must be the app owner or be added under Users and Access in the Spotify dashboard.)');
+  }
+}
+$('spbtn').onclick = () => {
+  if (spLS('sp_access')) {
+    if (!confirm('Disconnect Spotify?')) return;
+    ['sp_access', 'sp_exp', 'sp_refresh'].forEach(k => spLS(k, null));
+    spUpdateUI(); return status('Spotify disconnected.');
+  }
+  spConnect();
+};
+
+/* ---------- BPM database (GetSongBPM) ---------- */
+let meta = null, gsbSeq = 0;
+const gsbCache = new Map();
+const getGsbKey = () => spLS('gsb_key') || '';
+function cleanName(s) {                                      // drop (Official Video), [HD], "- Club Remix", "ft. X" ...
+  return s.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+          .replace(/\s-\s[^-]*\b(remix|edit|mix|version|remaster(ed)?|mono|stereo|live|radio)\b[^-]*$/i, '')
+          .replace(/\b(feat|ft)\.?\s.*$/i, ' ').replace(/\s+/g, ' ').trim();
+}
+function parseMeta(raw, channel) {                           // "Artist - Title" or fall back to the channel name
+  const t = cleanName(raw), i = t.indexOf(' - ');
+  if (i > 0) return { artist: t.slice(0, i).trim(), title: t.slice(i + 3).trim() };
+  return { artist: (channel || '').replace(/\s*-\s*Topic$/i, '').replace(/VEVO$/i, '').trim(), title: t };
+}
+async function gsbFetch(path, params) {
+  const qs = new URLSearchParams({ api_key: getGsbKey(), ...params }).toString();
+  for (const u of ['https://api.getsong.co' + path + '?' + qs, '/getsong' + path + '?' + qs]) {   // direct first, then server.py proxy
+    try { return await (await fetch(u)).json(); } catch (e) {}
+  }
+  throw new Error('the browser blocked the request. Start the app with "python server.py" instead of "python -m http.server" and try again.');
+}
+async function gsbLookup(m) {
+  const seq = ++gsbSeq, chip = $('dbbpm'), note = $('dbmatch');
+  note.textContent = '';
+  if (!m || !m.title) { chip.textContent = 'DB —'; return; }
+  if (!getGsbKey()) { chip.textContent = 'DB — add key'; return; }
+  chip.textContent = 'DB …';
+  const ck = (m.artist + '|' + m.title).toLowerCase();
+  try {
+    let res = gsbCache.get(ck);
+    if (!res) {
+      const s = await gsbFetch('/search/', m.artist ? { type: 'both', lookup: 'song:' + m.title + ' artist:' + m.artist } : { type: 'song', lookup: m.title });
+      if (s.error) throw new Error(typeof s.error === 'string' ? s.error : 'API error');
+      const hit = Array.isArray(s.search) ? s.search[0] : null;
+      res = { none: true };
+      if (hit) {
+        const song = hit.tempo ? hit : ((await gsbFetch('/song/', { id: hit.id })).song || hit);
+        const bpm = Math.round(+song.tempo);
+        if (bpm) res = { bpm, key: song.key_of || '', open: song.open_key || '', title: song.title || m.title, artist: (song.artist && song.artist.name) || m.artist };
+      }
+      gsbCache.set(ck, res);
+    }
+    if (seq !== gsbSeq) return;                              // a newer track was picked meanwhile
+    if (res.none) { chip.textContent = 'DB — no match'; return; }
+    chip.textContent = 'DB ' + res.bpm + (res.key ? ' · ' + res.key : '') + (res.open ? ' (' + res.open + ')' : '');
+    note.textContent = res.artist + ' – ' + res.title;       // shows which song it matched, so you can spot wrong matches
+  } catch (e) { if (seq === gsbSeq) { chip.textContent = 'DB — error'; status('BPM database: ' + e.message); } }
+}
+function updateGsbStat() { $('gstat').textContent = getGsbKey() ? 'API key saved' : 'No API key yet'; $('gkey').textContent = getGsbKey() ? 'Change API key' : 'Set API key'; }
+function askGsbKey() {
+  const k = prompt('Paste your GetSongBPM API key (free at getsongbpm.com/api). It stays in this browser only:', getGsbKey());
+  if (k !== null) spLS('gsb_key', k.trim());
+  updateGsbStat(); return getGsbKey();
+}
+$('gkey').onclick = askGsbKey;
+$('dbbpm').onclick = () => {
+  if (!getGsbKey()) { askGsbKey(); if (meta) gsbLookup(meta); return; }
+  const v = prompt('Look up the BPM of (Artist - Title):', meta ? (meta.artist ? meta.artist + ' - ' : '') + meta.title : '');
+  if (v && v.trim()) { meta = parseMeta(v.trim(), ''); gsbLookup(meta); }
+};
+updateGsbStat();
+
+/* ---------- tap tempo ---------- */
+let taps = [];
+function tap() {
+  const now = performance.now();
+  if (taps.length && now - taps[taps.length - 1] > 2500) taps = [];     // pause = start over
+  taps.push(now); if (taps.length > 12) taps.shift();                   // sliding window of the last 12 taps
+  $('tapbpm').textContent = taps.length < 2 ? 'TAP …'
+    : 'TAP ' + (60000 * (taps.length - 1) / (taps[taps.length - 1] - taps[0])).toFixed(1) + (taps.length < 4 ? ' ?' : '');
+}
+$('tap').addEventListener('pointerdown', e => { e.preventDefault(); tap(); });   // pointerdown = lowest latency, also on touch
+$('tap').addEventListener('click', e => { if (e.detail === 0) tap(); });         // keyboard activation only (avoid double count)
+$('tapbpm').onclick = () => { taps = []; $('tapbpm').textContent = 'TAP —'; };
+addEventListener('keydown', e => {
+  if ((e.key === 't' || e.key === 'T') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) tap();
+});
+
+/* ---------- settings menu ---------- */
+function updateYtStat() { $('ytstat').textContent = getKey() ? 'API key saved' : 'No API key yet'; $('key').textContent = getKey() ? 'Change API key' : 'Set API key'; }
+$('cfgbtn').onclick = e => { e.stopPropagation(); $('cfgpanel').hidden = !$('cfgpanel').hidden; };
+document.addEventListener('click', e => { if (!e.target.closest('.menu')) $('cfgpanel').hidden = true; });
+addEventListener('keydown', e => { if (e.key === 'Escape') $('cfgpanel').hidden = true; });
+updateYtStat();
+
+const trackEntry = t => ({
+  thumb: t.album && t.album.images && t.album.images.length ? t.album.images[t.album.images.length - 1].url : '',
+  title: t.name, sub: (t.artists || []).map(a => a.name).join(', '),
+  fn: () => {
+    $('url').value = 'https://open.spotify.com/track/' + t.id; autoplayNext = true; $('load').onclick();
+    meta = { title: cleanName(t.name), artist: ((t.artists || [])[0] || {}).name || '' }; gsbLookup(meta);
+  },
+});
+function renderEntries(entries) {
+  const box = $('results'); box.textContent = '';
+  for (const e of entries) {
+    const b = document.createElement('button'); b.className = 'item';
+    const img = document.createElement('img'); img.alt = ''; if (e.thumb) img.src = e.thumb;
+    const d = document.createElement('div');
+    const t = document.createElement('b'); t.textContent = e.title;
+    const c = document.createElement('span'); c.textContent = e.sub || '';
+    d.append(t, c); b.append(img, d); b.onclick = e.fn; box.appendChild(b);
+  }
+}
+const asTracks = list => list.map(x => x && (x.track || x.item || x)).filter(t => t && t.id && (!t.type || t.type === 'track'));
+async function spShow(fn, empty) {
+  try {
+    status('Loading from Spotify…');
+    const tracks = asTracks(await fn());
+    renderEntries(tracks.map(trackEntry));
+    status(tracks.length ? 'Pick a track to load it.' : empty);
+  } catch (e) { status('Spotify: ' + e.message); }
+}
+function searchSP() {
+  const q = $('q').value.trim();
+  if (!q) return;
+  if (!spLS('sp_access')) return status('Open the menu at the top right and connect Spotify first.');
+  spShow(async () => (await spFetch('/search', { q, type: 'track', limit: '10' })).tracks.items, 'No results.');   // search max is 10
+}
+$('spliked').onclick = () => spShow(async () => (await spFetch('/me/tracks', { limit: '50' })).items, 'No liked songs found.');
+$('splists').onclick = async () => {
+  try {
+    status('Loading playlists…');
+    const j = await spFetch('/me/playlists', { limit: '50' });
+    renderEntries((j.items || []).filter(Boolean).map(p => ({
+      thumb: p.images && p.images.length ? p.images[p.images.length - 1].url : '',
+      title: p.name, sub: (p.owner && p.owner.display_name) || '',
+      fn: () => spShow(async () => (await spFetch('/playlists/' + p.id + '/items', { limit: '50' })).items, 'No playable tracks in that playlist.'),
+    })));
+    status('Pick a playlist.');
+  } catch (e) { status('Spotify: ' + e.message); }
+};
+
+$('load').onclick = async () => {
+  const r = parse($('url').value);
+  if (!r) return status('That does not look like a YouTube or Spotify track link.');
+  resetEmbeds();
+  status('Loading…');
+  try { r.kind === 'yt' ? await loadYouTube(r.id) : await loadSpotify(r.uri); }
+  catch (e) { status(e.message); }
+};
+$('file').onchange = e => e.target.files[0] && loadFile(e.target.files[0]).catch(err => status('Could not read that file: ' + err.message));
+$('play').onclick = () => P && P.toggle();
+addEventListener('keydown', e => { if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); P && P.toggle(); } });
+
+/* ---------- live capture of this tab's audio (YouTube / Spotify / anything playing here) ---------- */
+let live = null;                                   // {stream, ac, an, start, frozen}
+const ph = () => live ? 0.85 : 0.5;                // playhead position (live mode leaves room only for the past)
+function stopCapture() {
+  if (!live) return;
+  live.frozen = (performance.now() - live.start) / 1000;
+  try { live.stream.getTracks().forEach(t => t.stop()); live.ac.close(); } catch (e) {}
+  live.stopped = true;
+}
+async function startCapture() {
+  if (live && !live.stopped) { stopCapture(); return status('Capture stopped.'); }
+  let stream;
+  try { stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, preferCurrentTab: true }); }
+  catch (e) { return status('Capture cancelled or not supported. Use Chrome or Edge on desktop.'); }
+  if (!stream.getAudioTracks().length) {
+    stream.getTracks().forEach(t => t.stop());
+    return status('No audio was shared. Choose this tab and tick "Share tab audio".');
+  }
+  const ac = new AudioContext(), src = ac.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+  const cfg = [['lowpass', 200, 0.7], ['bandpass', 1400, 0.5], ['highpass', 5000, 0.7]];
+  const an = cfg.map(([type, f, q]) => {                      // not connected to destination: no doubled audio
+    const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+    const a = ac.createAnalyser(); a.fftSize = 2048; src.connect(fl); fl.connect(a);
+    return { a, buf: new Float32Array(2048), peak: 0.01 };
+  });
+  const CAP = RES * 60 * 30;                                  // up to 30 min
+  wave = { low: new Float32Array(CAP), mid: new Float32Array(CAP), high: new Float32Array(CAP), n: 0, simulated: false };
+  live = { stream, ac, an, start: performance.now(), frozen: 0, stopped: false };
+  const L = live;
+  stream.getAudioTracks()[0].addEventListener('ended', () => { if (live === L && !L.stopped) stopCapture(); });
+  P = {
+    getTime: () => L.stopped ? L.frozen : (performance.now() - L.start) / 1000,
+    dur: () => Math.max(1, L.stopped ? L.frozen : (performance.now() - L.start) / 1000),
+    playing: () => !L.stopped, seek() {}, toggle() {},
+  };
+  status('Live capture on: hit play in the embed. The waveform is real, but only shows what has already played.');
+}
+function pump() {
+  if (!live || live.stopped) return;
+  const target = Math.min(wave.low.length - 1, Math.floor((performance.now() - live.start) / 1000 * RES));
+  if (wave.n > target) return;
+  const lv = live.an.map(o => {
+    o.a.getFloatTimeDomainData(o.buf);
+    let s = 0; for (let i = 0; i < o.buf.length; i++) s += o.buf[i] * o.buf[i];
+    const r = Math.sqrt(s / o.buf.length);
+    o.peak = Math.max(o.peak * 0.9997, r, 0.01);              // slow auto-gain so quiet and loud tracks both fill the view
+    return Math.pow(r / o.peak, 0.75);
+  });
+  while (wave.n <= target) { wave.low[wave.n] = lv[0]; wave.mid[wave.n] = lv[1]; wave.high[wave.n] = lv[2]; wave.n++; }
+  // rough live BPM from the last 30 s of the low band, refreshed every 2 s once there are 8 s of audio
+  const now = performance.now();
+  if (wave.n >= RES * 8 && now - (live.lastBpm || 0) > 2000) {
+    live.lastBpm = now;
+    const from = Math.max(1, wave.n - RES * 30), o = new Float32Array(wave.n - from);
+    for (let i = from; i < wave.n; i++) o[i - from] = Math.max(0, wave.low[i] - wave.low[i - 1]);
+    const r = detectBPM(o, RES);
+    if (r && r.conf > 4) showBPM(r, true);                  // low confidence: keep the previous reading
+  }
+}
+$('cap').onclick = startCapture;
+
+/* ---------- rendering ---------- */
+const main = $('main'), ov = $('overview');
+function fit(c) {
+  const r = c.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (c.width !== Math.round(r.width * d) || c.height !== Math.round(r.height * d)) { c.width = Math.round(r.width * d); c.height = Math.round(r.height * d); }
+  return d;
+}
+function bar(ctx, x, mid, h, i, w, a) {
+  const { low, mid: md, high } = wave;
+  if (i < 0 || i >= wave.n) return;
+  const l = low[i], m = md[i], hi = high[i];
+  const c = PAL[mode];
+  ctx.globalAlpha = a;
+  ctx.globalCompositeOperation = mode === 'rgb' ? 'lighter' : 'source-over';   // additive: red+green=yellow, all three=white
+  ctx.fillStyle = c[0]; ctx.fillRect(x, mid - l * h, w, l * h * 2);
+  ctx.fillStyle = c[1]; ctx.fillRect(x, mid - m * h * 0.8, w, m * h * 1.6);
+  ctx.fillStyle = c[2]; ctx.fillRect(x, mid - hi * h * 0.55, w, hi * h * 1.1);
+  ctx.globalCompositeOperation = 'source-over';
+}
+const PAL = { rgb: ['#ff2a2a', '#22e060', '#2a7bff'], band: ['#2a6bff', '#ff9d1c', '#ffffff'] };
+let mode = 'rgb';
+function applyMode() {
+  mode = $('style').value;
+  PAL[mode].forEach((col, i) => $('c' + i).style.cssText = 'display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;background:' + col);
+}
+$('style').onchange = applyMode; applyMode();
+function drawMain(t) {
+  const d = fit(main), ctx = main.getContext('2d'), W = main.width, H = main.height, mid = H / 2;
+  ctx.clearRect(0, 0, W, H);
+  if (wave) {
+    const secs = +$('zoom').value, pps = W / secs;           // pixels per second
+    const step = Math.max(1, Math.round(d));                  // column width
+    const px = W * ph();
+    for (let x = 0; x < W; x += step) {
+      const ts = t + (x - px) / pps;
+      if (ts < 0) continue;
+      bar(ctx, x, mid, mid * 0.95, Math.floor(ts * RES), step, x < px ? 0.45 : 1);
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = '#3a4252'; ctx.font = (13 * d) + 'px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('Waveform appears here', W / 2, mid + 4 * d);
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = '#ff3b4e'; ctx.fillRect(W * ph() - d, 0, 2 * d, H);
+}
+function drawOverview(t, dur) {
+  const d = fit(ov), ctx = ov.getContext('2d'), W = ov.width, H = ov.height, mid = H / 2;
+  ctx.clearRect(0, 0, W, H);
+  if (!wave) return;
+  const step = Math.max(1, Math.round(d));
+  for (let x = 0; x < W; x += step) {
+    const i0 = Math.floor((x / W) * wave.n), i1 = Math.max(i0 + 1, Math.floor(((x + step) / W) * wave.n));
+    let best = i0, bv = -1;                                   // pick the loudest point in the column
+    for (let i = i0; i < i1 && i < wave.n; i++) { const v = wave.low[i] + wave.mid[i] + wave.high[i]; if (v > bv) { bv = v; best = i; } }
+    bar(ctx, x, mid, mid * 0.92, best, step, (x / W) * dur < t ? 0.4 : 1);
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = '#ff3b4e'; ctx.fillRect((t / dur) * W - d, 0, 2 * d, H);
+}
+function frame() {
+  pump();
+  const t = P ? P.getTime() : 0, dur = P ? P.dur() : 0;
+  drawMain(t);
+  drawOverview(t, dur || 1);
+  $('time').textContent = fmt(t, true) + ' / ' + fmt(dur);
+  requestAnimationFrame(frame);
+}
+ov.addEventListener('click', e => {
+  if (!P || !P.dur()) return;
+  const r = ov.getBoundingClientRect();
+  P.seek(((e.clientX - r.left) / r.width) * P.dur());
+});
+// drag on the main waveform to scrub
+let drag = null;
+main.addEventListener('pointerdown', e => { if (P) { drag = { x: e.clientX, t: P.getTime() }; main.setPointerCapture(e.pointerId); } });
+main.addEventListener('pointermove', e => {
+  if (!drag || !P) return;
+  const r = main.getBoundingClientRect(), secs = +$('zoom').value;
+  P.seek(Math.max(0, Math.min(P.dur(), drag.t - ((e.clientX - drag.x) / r.width) * secs)));
+});
+main.addEventListener('pointerup', () => drag = null);
+spUpdateUI();
+spHandleRedirect().catch(e => status('Spotify: ' + e.message));
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
